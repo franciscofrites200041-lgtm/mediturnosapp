@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -26,7 +26,7 @@ const PLANS = {
     ENTERPRISE: { name: 'Enterprise', price: '$49.990/mes', features: ['Médicos ilimitados', 'Múltiples sucursales'] },
 };
 
-export default function RegisterPage() {
+function RegisterContent() {
     const searchParams = useSearchParams();
     const selectedPlan = (searchParams.get('plan') || 'PROFESSIONAL') as keyof typeof PLANS;
     const planInfo = PLANS[selectedPlan] || PLANS.PROFESSIONAL;
@@ -431,5 +431,13 @@ export default function RegisterPage() {
                 </div>
             </div >
         </div >
+    );
+}
+
+export default function RegisterPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Cargando...</div>}>
+            <RegisterContent />
+        </Suspense>
     );
 }
