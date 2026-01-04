@@ -17,7 +17,7 @@ RUN pnpm install --no-frozen-lockfile
 COPY . .
 
 # Generar cliente Prisma
-RUN pnpm dlx prisma generate --schema=apps/api/prisma/schema.prisma
+RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
 
 # Build de la API
 RUN pnpm build --filter=@mediturnos/api...
