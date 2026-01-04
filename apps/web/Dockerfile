@@ -29,6 +29,10 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/.next/standalone ./
 
+# Instalar dependencias explicitamente para asegurar que 'next' existe
+# (Esto arregla problemas de symlinks con pnpm en standalone)
+RUN npm install
+
 EXPOSE 3000
 
 CMD ["node", "server.js"]
