@@ -31,4 +31,4 @@ COPY --from=builder /app/apps/web/.next/standalone ./
 
 EXPOSE 3000
 
-CMD ["node", "apps/web/server.js"]
+CMD ["sh", "-c", "ls -R /app && sleep 3600"]
