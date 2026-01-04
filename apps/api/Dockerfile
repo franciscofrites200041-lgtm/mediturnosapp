@@ -39,9 +39,12 @@ RUN pnpm install --prod --no-frozen-lockfile
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
 
+# Instalar OpenSSL para Prisma (necesario en Alpine)
+RUN apk add --no-cache openssl libc6-compat
+
 # Generar cliente prisma en producción (garantiza ubicación correcta)
 RUN npx prisma@5 generate --schema=apps/api/prisma/schema.prisma
 
 EXPOSE 3001
 
-CMD ["sh", "-c", "sleep 3600"]
+CMD ["node", "apps/api/dist/src/main"]
