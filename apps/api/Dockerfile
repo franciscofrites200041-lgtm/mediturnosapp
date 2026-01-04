@@ -11,7 +11,7 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 
 # Instalar todas las dependencias (dev incluidas)
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Copiar todo el código fuente
 COPY . .
@@ -33,7 +33,7 @@ COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 
 # Instalar solo prod dependencies
-RUN pnpm install --prod --frozen-lockfile
+RUN pnpm install --prod --no-frozen-lockfile
 
 # Copiar build desde builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
