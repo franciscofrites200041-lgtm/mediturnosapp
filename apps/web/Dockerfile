@@ -31,7 +31,7 @@ COPY --from=builder /app/apps/web/.next/standalone ./
 
 # Instalar dependencias explicitamente para asegurar que 'next' existe
 # (Esto arregla problemas de symlinks con pnpm en standalone)
-RUN npm install
+RUN npm install --omit=dev --legacy-peer-deps
 
 EXPOSE 3000
 
