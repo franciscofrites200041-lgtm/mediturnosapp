@@ -51,6 +51,7 @@ export class ClinicsService {
         return this.prisma.clinic.create({
             data: {
                 ...data,
+                phone: data.phone || '',
                 apiKey,
                 trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days trial
             },

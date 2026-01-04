@@ -63,7 +63,7 @@ export class AuthService {
                     name: dto.clinicName,
                     slug,
                     email: dto.email.toLowerCase(),
-                    phone: dto.phone,
+                    phone: dto.phone || '',
                     subscriptionStatus: SubscriptionStatus.TRIAL,
                     subscriptionPlan: (dto.plan as SubscriptionPlan) || SubscriptionPlan.PROFESSIONAL, // Full features during trial
                     trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days trial
