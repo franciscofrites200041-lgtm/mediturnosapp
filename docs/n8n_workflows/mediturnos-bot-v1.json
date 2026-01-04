@@ -1,0 +1,371 @@
+{
+    "name": "MediTurnos Bot Multi-tenant",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "whatsapp-webhook",
+                "options": {}
+            },
+            "id": "e6f1b3a1-c2d4-4e5f-a6b7-c8d9e0f1a2b3",
+            "name": "Webhook WhatsApp",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                220,
+                300
+            ],
+            "webhookId": "e6f1b3a1-c2d4-4e5f-a6b7-c8d9e0f1a2b3"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "={{ $json.body.entry[0].changes[0].value.messages[0].type }}",
+                            "value2": "text"
+                        }
+                    ]
+                }
+            },
+            "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+            "name": "Es Mensaje de Texto?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                440,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "// Extraer datos clave del mensaje\nconst change = items[0].json.body.entry[0].changes[0].value;\nconst message = change.messages[0];\nconst contact = change.contacts[0];\nconst business_phone_id = change.metadata.phone_number_id;\n\nreturn {\n  json: {\n    message_body: message.text.body,\n    sender_phone: message.from,\n    sender_name: contact.profile.name,\n    business_phone_id: business_phone_id,\n    timestamp: message.timestamp\n  }\n};"
+            },
+            "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+            "name": "Extraer Datos",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                660,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://localhost:3001/whatsapp/webhook",
+                "sendBody": true,
+                "contentType": "json",
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "entry",
+                            "value": "={{ $node[\"Webhook WhatsApp\"].json.body.entry }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
+            "name": "Guardar en Backend (Inbox)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                880,
+                100
+            ],
+            "notes": "Envía copia al backend para que aparezca en el Dashboard de la secretaria"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "={{ $json.message_body.toLowerCase() }}",
+                            "operation": "contains",
+                            "value2": "secretaria"
+                        },
+                        {
+                            "value1": "={{ $json.message_body.toLowerCase() }}",
+                            "operation": "contains",
+                            "value2": "humano"
+                        },
+                        {
+                            "value1": "={{ $json.message_body.toLowerCase() }}",
+                            "operation": "contains",
+                            "value2": "recepcion"
+                        }
+                    ]
+                },
+                "combineOperation": "any"
+            },
+            "id": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f8g",
+            "name": "Pide Humano?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                880,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://localhost:3001/whatsapp/inbox/handover",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "phone",
+                            "value": "={{ $json.sender_phone }}"
+                        },
+                        {
+                            "name": "business_phone_id",
+                            "value": "={{ $json.business_phone_id }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8g9h",
+            "name": "Marcar Handover",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.business_phone_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": \"Te estoy derivando con una secretaria. En breve te atenderán.\"} }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "f6a7b8c9-d0e1-4f2a-3b4c-5d6e7f8g9h0i",
+            "name": "Respuesta Derivación",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1300,
+                200
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "YOUR_CREDENTIAL_ID",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "={{ $json.message_body.toLowerCase() }}",
+                            "operation": "contains",
+                            "value2": "turno"
+                        },
+                        {
+                            "value1": "={{ $json.message_body.toLowerCase() }}",
+                            "operation": "contains",
+                            "value2": "agendar"
+                        }
+                    ]
+                },
+                "combineOperation": "any"
+            },
+            "id": "SwitchIntent",
+            "name": "Intención: Turno?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                450
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.business_phone_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": \"👋 ¡Hola! Soy el asistente virtual de MediTurnos.\\n\\n1. Agendar turno 📅\\n2. Mis turnos pendientes 📋\\n3. Hablar con recepción 👩‍💼\\n\\nEscribe el número de la opción.\"} }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "MenuPrincipal",
+            "name": "Enviar Menú Principal",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1300,
+                600
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "YOUR_CREDENTIAL_ID",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.business_phone_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": \"Para agendar, necesito saber tu especialidad. Por favor escribe la especialidad (ej: Cardiología, Pediatría).\"} }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "FlowTurno",
+            "name": "Flow: Solicitar Especialidad",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1300,
+                450
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "YOUR_CREDENTIAL_ID",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook WhatsApp": {
+            "main": [
+                [
+                    {
+                        "node": "Es Mensaje de Texto?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Es Mensaje de Texto?": {
+            "main": [
+                [
+                    {
+                        "node": "Extraer Datos",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extraer Datos": {
+            "main": [
+                [
+                    {
+                        "node": "Guardar en Backend (Inbox)",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Pide Humano?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Pide Humano?": {
+            "main": [
+                [
+                    {
+                        "node": "Marcar Handover",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Intención: Turno?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Marcar Handover": {
+            "main": [
+                [
+                    {
+                        "node": "Respuesta Derivación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Intención: Turno?": {
+            "main": [
+                [
+                    {
+                        "node": "Flow: Solicitar Especialidad",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Enviar Menú Principal",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

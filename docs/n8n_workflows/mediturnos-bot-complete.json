@@ -1,0 +1,479 @@
+{
+    "name": "MediTurnos Bot Completo (V2)",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "whatsapp-webhook",
+                "options": {}
+            },
+            "id": "webhook-start",
+            "name": "Webhook WhatsApp",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                100,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const change = items[0].json.body.entry[0].changes[0].value;\nconst message = change.messages[0];\nconst contact = change.contacts[0];\n\nif (message.type !== 'text') {\n  return { json: { is_text: false } };\n}\n\nreturn {\n  json: {\n    is_text: true,\n    text: message.text.body,\n    lower_text: message.text.body.toLowerCase(),\n    sender_phone: message.from,\n    sender_name: contact.profile.name,\n    business_id: change.metadata.phone_number_id\n  }\n};"
+            },
+            "id": "extract-data",
+            "name": "Extraer Datos",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                300,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://localhost:3001/whatsapp/webhook",
+                "sendBody": true,
+                "contentType": "json",
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "entry",
+                            "value": "={{ $node[\"Webhook WhatsApp\"].json.body.entry }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "sync-inbox",
+            "name": "Sync Inbox Backend",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                500,
+                140
+            ]
+        },
+        {
+            "parameters": {
+                "dataType": "string",
+                "value1": "={{ $json.lower_text }}",
+                "rules": [
+                    {
+                        "operation": "contains",
+                        "value2": "hola",
+                        "output": 0
+                    },
+                    {
+                        "operation": "contains",
+                        "value2": "agendar",
+                        "output": 1
+                    },
+                    {
+                        "operation": "contains",
+                        "value2": "turno",
+                        "output": 1
+                    },
+                    {
+                        "operation": "contains",
+                        "value2": "humano",
+                        "output": 2
+                    },
+                    {
+                        "operation": "contains",
+                        "value2": "secretaria",
+                        "output": 2
+                    },
+                    {
+                        "operation": "contains",
+                        "value2": "cancelar",
+                        "output": 3
+                    }
+                ],
+                "fallbackOutput": 4
+            },
+            "id": "router-intent",
+            "name": "Router de Intención",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 1,
+            "position": [
+                500,
+                400
+            ],
+            "notes": "0:Hola, 1:Agendar, 2:Soporte, 3:Cancelar, 4:Otros (Búsqueda)"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.business_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": \"👋 ¡Hola \" + $json.sender_name + \"!\\n\\nSoy el asistente de MediTurnos. ¿En qué puedo ayudarte hoy?\\n\\n1️⃣ *Agendar Turno* (Escribe 'Agendar')\\n2️⃣ *Mis Turnos* (Escribe 'Mis turnos')\\n3️⃣ *Hablar con Recepción* (Escribe 'Secretaria')\"} }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "msg-welcome",
+            "name": "Enviar Bienvenida",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                800,
+                200
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "WhatsappAPI",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "url": "http://localhost:3001/areas",
+                "options": {}
+            },
+            "id": "get-areas",
+            "name": "Obtener Especialidades",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                800,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const areas = items.map(item => item.json);\nconst areaList = areas.map(a => `• ${a.name}`).join('\\n');\nconst originalMsg = $node[\"Extraer Datos\"].json;\n\nreturn {\n  json: {\n    text: `📋 *Especialidades Disponibles*\\n\\n${areaList}\\n\\n👉 *Escribe el nombre de la especialidad* para ver doctores. (Ej: 'Cardiología')`,\n    sender_phone: originalMsg.sender_phone,\n    business_id: originalMsg.business_id\n  }\n};"
+            },
+            "id": "format-areas",
+            "name": "Formatear Lista Áreas",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                980,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.business_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": $json.text } }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "send-areas",
+            "name": "Enviar Especialidades",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1180,
+                400
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "WhatsappAPI",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "url": "http://localhost:3001/users/doctors",
+                "options": {}
+            },
+            "id": "get-doctors-all",
+            "name": "Obtener Todos Doctores",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                800,
+                700
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const userText = $node[\"Extraer Datos\"].json.lower_text;\nconst allDoctors = items.map(i => i.json);\n\n// Buscar doctores que coincidan con la especialidad o nombre escrito\nconst matchedDoctors = allDoctors.filter(doc => \n  (doc.specialty && doc.specialty.name.toLowerCase().includes(userText)) ||\n  doc.firstName.toLowerCase().includes(userText) ||\n  doc.lastName.toLowerCase().includes(userText)\n);\n\nif (matchedDoctors.length === 0) {\n  return { json: { found: false } };\n}\n\nreturn { \n  json: { \n    found: true, \n    doctors: matchedDoctors,\n    originalData: $node[\"Extraer Datos\"].json\n  } \n};"
+            },
+            "id": "search-match",
+            "name": "Buscar Coincidencia (Inteligente)",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                980,
+                700
+            ],
+            "notes": "Busca si lo que escribió el usuario coincide con alguna especialidad o doctor"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.found }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "id": "check-found",
+            "name": "Encontró algo?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                1180,
+                700
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const docs = items[0].json.doctors;\nconst original = items[0].json.originalData;\n\nconst list = docs.map(d => `👨‍⚕️ *Dr. ${d.firstName} ${d.lastName}* (${d.specialty?.name})\\n   └ ID: ${d.id}`).join('\\n\\n');\n\nreturn {\n  json: {\n    text: `🔎 *Doctores Encontrados*\\n\\n${list}\\n\\n📅 *Para ver horarios*, escribe: \"Horarios [ID]\"\\n(Ejemplo: \"Horarios 123\")`,\n    sender_phone: original.sender_phone,\n    business_id: original.business_id\n  }\n};"
+            },
+            "id": "format-doctors",
+            "name": "Formatear Respuesta Doctores",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                1400,
+                600
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.business_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": $json.text } }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "send-doctors",
+            "name": "Enviar Lista Doctores",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1600,
+                600
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "WhatsappAPI",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $node[\"Extraer Datos\"].json.business_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $node[\"Extraer Datos\"].json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": \"🤔 No entendí tu mensaje. \\n\\nPrueba escribir:\\n- 'Agendar' para ver especialidades.\\n- El nombre de una especialidad (ej: 'Pediatría').\\n- 'Secretaria' para ayuda humana.\" } }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "send-fallback",
+            "name": "Respuesta Fallback",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1400,
+                800
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "WhatsappAPI",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook WhatsApp": {
+            "main": [
+                [
+                    {
+                        "node": "Extraer Datos",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extraer Datos": {
+            "main": [
+                [
+                    {
+                        "node": "Sync Inbox Backend",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Router de Intención",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Router de Intención": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Bienvenida",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Obtener Especialidades",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [],
+                [],
+                [
+                    {
+                        "node": "Obtener Todos Doctores",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Obtener Especialidades": {
+            "main": [
+                [
+                    {
+                        "node": "Formatear Lista Áreas",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Formatear Lista Áreas": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Especialidades",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Obtener Todos Doctores": {
+            "main": [
+                [
+                    {
+                        "node": "Buscar Coincidencia (Inteligente)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Buscar Coincidencia (Inteligente)": {
+            "main": [
+                [
+                    {
+                        "node": "Encontró algo?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Encontró algo?": {
+            "main": [
+                [
+                    {
+                        "node": "Formatear Respuesta Doctores",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Respuesta Fallback",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Formatear Respuesta Doctores": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Lista Doctores",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

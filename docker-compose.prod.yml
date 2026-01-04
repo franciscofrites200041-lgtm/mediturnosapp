@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Base de Datos Dedicada para MediTurnos (Aislada de tus otros proyectos)
+  db_mediturnos:
+    image: postgres:15-alpine
+    container_name: mediturnos_db
+    restart: always
+    environment:
+      POSTGRES_USER: mediturnos
+      POSTGRES_PASSWORD: secure_prod_password_change_me
+      POSTGRES_DB: mediturnos_prod
+    volumes:
+      - postgres_data_mediturnos:/var/lib/postgresql/data
+    networks:
+      - mediturnos_net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U mediturnos -d mediturnos_prod" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis Dedicado
+  redis_mediturnos:
+    image: redis:alpine
+    container_name: mediturnos_redis
+    restart: always
+    networks:
+      - mediturnos_net
+
+  # API Backend (NestJS)
+  api_mediturnos:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: mediturnos_api
+    restart: always
+    ports:
+      - "3011:3001" # Exponemos en 3011 del host para que Cloudflare Tunnel pueda acceder
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgres://mediturnos:secure_prod_password_change_me@db_mediturnos:5432/mediturnos_prod?schema=public
+      REDIS_HOST: redis_mediturnos
+      REDIS_PORT: 6379
+      # IMPORTANTE: Cambia estos valores en producción
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      FRONTEND_URL: https://mediturnosapp.com
+      # Integraciones
+      MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
+      MP_PUBLIC_KEY: ${MP_PUBLIC_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM:-notificaciones@mediturnosapp.com}
+    depends_on:
+      db_mediturnos:
+        condition: service_healthy
+      redis_mediturnos:
+        condition: service_started
+    networks:
+      - mediturnos_net
+
+  # Frontend Web (Next.js)
+  web_mediturnos:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: mediturnos_web
+    restart: always
+    ports:
+      - "3010:3000" # Exponemos en 3010 del host
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://api.mediturnosapp.com
+    depends_on:
+      - api_mediturnos
+    networks:
+      - mediturnos_net
+
+volumes:
+  postgres_data_mediturnos:
+
+
+networks:
+  mediturnos_net:
+    driver: bridge

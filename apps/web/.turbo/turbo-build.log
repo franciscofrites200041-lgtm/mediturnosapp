@@ -1,0 +1,87 @@
+
+> @mediturnos/web@1.0.0 build C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\apps\web
+> next build
+
+  ▲ Next.js 14.2.18
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/24) ...
+   Generating static pages (6/24) 
+   Generating static pages (12/24) 
+   Generating static pages (18/24) 
+ ✓ Generating static pages (24/24)
+   Finalizing page optimization ...
+   Collecting build traces ...
+ ⚠ Failed to copy traced files for C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\apps\web\.next\server\pages\_app.js Error: EPERM: operation not permitted, symlink 'C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\react@18.3.1\node_modules\react' -> 'C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\apps\web\.next\standalone\node_modules\react'
+    at async Object.symlink (node:internal/fs/promises:1009:10)
+    at async C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\utils.js:1399:25
+    at async Promise.all (index 1)
+    at async handleTraceFiles (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\utils.js:1387:9)
+    at async copyTracedFiles (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\utils.js:1448:9)
+    at async C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\index.js:223:9
+    at async Span.traceAsyncFn (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\trace\trace.js:154:20)
+    at async writeStandaloneDirectory (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\index.js:222:5)
+    at async C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\index.js:2139:17
+    at async Span.traceAsyncFn (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\trace\trace.js:154:20) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Users\\franc\\.gemini\\antigravity\\scratch\\mediturnos-saas\\node_modules\\.pnpm\\react@18.3.1\\node_modules\\react',
+  dest: 'C:\\Users\\franc\\.gemini\\antigravity\\scratch\\mediturnos-saas\\apps\\web\\.next\\standalone\\node_modules\\react'
+}
+ ⚠ Failed to copy traced files for C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\apps\web\.next\server\pages\_error.js Error: EPERM: operation not permitted, symlink 'C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next' -> 'C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\apps\web\.next\standalone\node_modules\next'
+    at async Object.symlink (node:internal/fs/promises:1009:10)
+    at async C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\utils.js:1399:25
+    at async Promise.all (index 0)
+    at async handleTraceFiles (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\utils.js:1387:9)
+    at async copyTracedFiles (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\utils.js:1448:9)
+    at async C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\index.js:223:9
+    at async Span.traceAsyncFn (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\trace\trace.js:154:20)
+    at async writeStandaloneDirectory (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\index.js:222:5)
+    at async C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\build\index.js:2139:17
+    at async Span.traceAsyncFn (C:\Users\franc\.gemini\antigravity\scratch\mediturnos-saas\node_modules\.pnpm\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\node_modules\next\dist\trace\trace.js:154:20) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'symlink',
+  path: 'C:\\Users\\franc\\.gemini\\antigravity\\scratch\\mediturnos-saas\\node_modules\\.pnpm\\next@14.2.18_react-dom@18.3.1_react@18.3.1__react@18.3.1\\node_modules\\next',
+  dest: 'C:\\Users\\franc\\.gemini\\antigravity\\scratch\\mediturnos-saas\\apps\\web\\.next\\standalone\\node_modules\\next'
+}
+
+Route (app)                                 Size     First Load JS
+┌ ○ /                                       3.51 kB        97.5 kB
+├ ○ /_not-found                             874 B          88.1 kB
+├ ○ /auth/forgot-password                   3.31 kB         128 kB
+├ ○ /auth/login                             6.16 kB         136 kB
+├ ○ /auth/register                          5.46 kB         135 kB
+├ ○ /auth/reset-password                    4.43 kB         129 kB
+├ ○ /auth/verify-email                      3.17 kB         118 kB
+├ ○ /dashboard                              5.24 kB         180 kB
+├ ○ /dashboard/appointments                 5.88 kB         174 kB
+├ ○ /dashboard/areas                        5.47 kB         159 kB
+├ ○ /dashboard/doctors                      5.81 kB         190 kB
+├ ○ /dashboard/medical-records              3.1 kB          146 kB
+├ ○ /dashboard/my-agenda                    5.82 kB         149 kB
+├ ○ /dashboard/my-patients                  3.07 kB         146 kB
+├ ○ /dashboard/patients                     8.87 kB         193 kB
+├ ƒ /dashboard/patients/[id]/history        3.69 kB         140 kB
+├ ƒ /dashboard/patients/[id]/prescriptions  6.3 kB          170 kB
+├ ○ /dashboard/prescriptions                3.38 kB         140 kB
+├ ○ /dashboard/profile                      5.5 kB          131 kB
+├ ○ /dashboard/reports                      2.82 kB         131 kB
+├ ○ /dashboard/schedules                    5.58 kB         159 kB
+├ ○ /dashboard/settings                     7.22 kB         142 kB
+├ ○ /privacy                                181 B          94.2 kB
+└ ○ /terms                                  181 B          94.2 kB
++ First Load JS shared by all               87.2 kB
+  ├ chunks/16b899b3-774ce8fc2b44f9bc.js     53.6 kB
+  ├ chunks/9120-6722ae2c1fd741b7.js         31.6 kB
+  └ other shared chunks (total)             1.96 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

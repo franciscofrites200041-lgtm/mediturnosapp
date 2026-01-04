@@ -1,0 +1,24 @@
+{
+  "name": "mediturnos-saas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de gestión de clínicas médicas multi-tenant",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:migrate": "cd apps/api && pnpm prisma migrate dev",
+    "db:generate": "cd apps/api && pnpm prisma generate",
+    "db:studio": "cd apps/api && pnpm prisma studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

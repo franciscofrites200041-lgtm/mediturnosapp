@@ -1,0 +1,1 @@
+﻿src/app/dashboard/schedules/page.tsx(169,64): error TS7006: Parameter 'schedule' implicitly has an 'any' type.

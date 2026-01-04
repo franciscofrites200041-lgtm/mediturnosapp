@@ -1,0 +1,451 @@
+{
+    "name": "MediTurnos WhatsApp Bot Multi-Tenant",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "whatsapp",
+                "options": {}
+            },
+            "id": "webhook-receiver",
+            "name": "WhatsApp Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ],
+            "webhookId": "mediturnos-whatsapp"
+        },
+        {
+            "parameters": {
+                "values": {
+                    "string": [
+                        {
+                            "name": "from_number",
+                            "value": "={{ $json.data.key.remoteJid.replace('@s.whatsapp.net', '') }}"
+                        },
+                        {
+                            "name": "to_number",
+                            "value": "={{ $json.instance }}"
+                        },
+                        {
+                            "name": "message_text",
+                            "value": "={{ $json.data.message.conversation || $json.data.message.extendedTextMessage?.text || '' }}"
+                        },
+                        {
+                            "name": "message_id",
+                            "value": "={{ $json.data.key.id }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "extract-message-data",
+            "name": "Extract Message Data",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 2,
+            "position": [
+                450,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "lookup",
+                "documentId": {
+                    "__rl": true,
+                    "value": "TU_GOOGLE_SHEET_ID",
+                    "mode": "list"
+                },
+                "sheetName": {
+                    "__rl": true,
+                    "value": "Clinicas",
+                    "mode": "list"
+                },
+                "lookupColumn": "whatsapp_instance",
+                "lookupValue": "={{ $json.to_number }}",
+                "options": {}
+            },
+            "id": "lookup-clinic",
+            "name": "Lookup Clinic Config",
+            "type": "n8n-nodes-base.googleSheets",
+            "typeVersion": 4,
+            "position": [
+                650,
+                300
+            ],
+            "notes": "Busca la configuración de la clínica basado en el número de WhatsApp"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "string": [
+                        {
+                            "value1": "={{ $json.api_key }}",
+                            "operation": "isNotEmpty"
+                        }
+                    ]
+                }
+            },
+            "id": "check-clinic-found",
+            "name": "Clinic Found?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                850,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "content": "Lo siento, esta clínica no está configurada en el sistema. Por favor contacta al administrador.",
+                "options": {}
+            },
+            "id": "clinic-not-found-response",
+            "name": "Clinic Not Found Response",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                450
+            ]
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "rules": [
+                        {
+                            "value": "={{ $json.message_text.toLowerCase() }}",
+                            "conditions": {
+                                "string": [
+                                    {
+                                        "value1": "={{ $json.message_text.toLowerCase() }}",
+                                        "operation": "contains",
+                                        "value2": "turno"
+                                    }
+                                ]
+                            },
+                            "renameOutput": true,
+                            "outputKey": "agendar"
+                        },
+                        {
+                            "value": "={{ $json.message_text.toLowerCase() }}",
+                            "conditions": {
+                                "string": [
+                                    {
+                                        "value1": "={{ $json.message_text.toLowerCase() }}",
+                                        "operation": "contains",
+                                        "value2": "cancelar"
+                                    }
+                                ]
+                            },
+                            "renameOutput": true,
+                            "outputKey": "cancelar"
+                        },
+                        {
+                            "value": "={{ $json.message_text.toLowerCase() }}",
+                            "conditions": {
+                                "string": [
+                                    {
+                                        "value1": "={{ $json.message_text.toLowerCase() }}",
+                                        "operation": "regex",
+                                        "value2": "^(hola|buenos|buenas|hi|hey).*"
+                                    }
+                                ]
+                            },
+                            "renameOutput": true,
+                            "outputKey": "saludo"
+                        }
+                    ]
+                },
+                "fallbackOutput": "default"
+            },
+            "id": "detect-intent",
+            "name": "Detect Intent",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 2,
+            "position": [
+                1050,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "GET",
+                "url": "={{ $json.api_url }}/specialties",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "options": {}
+            },
+            "id": "get-specialties",
+            "name": "Get Specialties",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                1250,
+                100
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "API_KEY_CREDENTIAL_ID",
+                    "name": "MediTurnos API Key"
+                }
+            },
+            "notes": "Configura el header X-API-Key con el valor de la clínica"
+        },
+        {
+            "parameters": {
+                "method": "GET",
+                "url": "={{ $json.api_url }}/availability",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendQuery": true,
+                "queryParameters": {
+                    "parameters": [
+                        {
+                            "name": "specialty",
+                            "value": "={{ $json.selected_specialty }}"
+                        },
+                        {
+                            "name": "date",
+                            "value": "={{ $json.selected_date }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "check-availability",
+            "name": "Check Availability",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                1450,
+                100
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $json.api_url }}/appointments",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "doctorId",
+                            "value": "={{ $json.selected_doctor_id }}"
+                        },
+                        {
+                            "name": "slotStart",
+                            "value": "={{ $json.selected_slot }}"
+                        },
+                        {
+                            "name": "patientName",
+                            "value": "={{ $json.patient_name }}"
+                        },
+                        {
+                            "name": "patientPhone",
+                            "value": "={{ $json.from_number }}"
+                        },
+                        {
+                            "name": "reason",
+                            "value": "={{ $json.reason || 'Reservado por WhatsApp' }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "book-appointment",
+            "name": "Book Appointment",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                1650,
+                100
+            ]
+        },
+        {
+            "parameters": {
+                "method": "DELETE",
+                "url": "={{ $json.api_url }}/appointments",
+                "authentication": "genericCredentialType",
+                "genericAuthType": "httpHeaderAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "patientPhone",
+                            "value": "={{ $json.from_number }}"
+                        },
+                        {
+                            "name": "confirmationCode",
+                            "value": "={{ $json.confirmation_code }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "cancel-appointment",
+            "name": "Cancel Appointment",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4,
+            "position": [
+                1250,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "instanceName": "={{ $json.to_number }}",
+                "operation": "sendMessage",
+                "textMessage": "={{ $json.response_message }}",
+                "remoteJid": "={{ $json.from_number }}@s.whatsapp.net"
+            },
+            "id": "send-whatsapp-response",
+            "name": "Send WhatsApp Response",
+            "type": "n8n-nodes-base.evolutionApi",
+            "typeVersion": 1,
+            "position": [
+                1850,
+                300
+            ],
+            "notes": "Envía la respuesta al usuario por WhatsApp"
+        },
+        {
+            "parameters": {
+                "values": {
+                    "string": [
+                        {
+                            "name": "response_message",
+                            "value": "¡Hola! 👋 Bienvenido a *{{ $json.clinic_name }}*\n\n¿Qué deseas hacer hoy?\n\n1️⃣ Agendar un turno\n2️⃣ Cancelar un turno\n3️⃣ Consultar mis turnos\n4️⃣ Hablar con recepción\n\nResponde con el número de la opción."
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "greeting-message",
+            "name": "Greeting Message",
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 2,
+            "position": [
+                1250,
+                550
+            ]
+        }
+    ],
+    "connections": {
+        "WhatsApp Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Extract Message Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract Message Data": {
+            "main": [
+                [
+                    {
+                        "node": "Lookup Clinic Config",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Lookup Clinic Config": {
+            "main": [
+                [
+                    {
+                        "node": "Clinic Found?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Clinic Found?": {
+            "main": [
+                [
+                    {
+                        "node": "Detect Intent",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Clinic Not Found Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Detect Intent": {
+            "main": [
+                [
+                    {
+                        "node": "Get Specialties",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Cancel Appointment",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Greeting Message",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Greeting Message",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Greeting Message": {
+            "main": [
+                [
+                    {
+                        "node": "Send WhatsApp Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "meta": {
+        "templateCredsSetupCompleted": false
+    },
+    "pinData": {},
+    "tags": [
+        {
+            "name": "WhatsApp",
+            "id": "whatsapp"
+        },
+        {
+            "name": "MediTurnos",
+            "id": "mediturnos"
+        }
+    ]
+}

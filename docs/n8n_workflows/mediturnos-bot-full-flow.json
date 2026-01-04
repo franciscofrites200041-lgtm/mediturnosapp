@@ -1,0 +1,645 @@
+{
+    "name": "MediTurnos Bot Flow Completo (V3.1)",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "whatsapp-webhook",
+                "options": {}
+            },
+            "id": "webhook",
+            "name": "Webhook WhatsApp",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                100,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const change = items[0].json.body.entry[0].changes[0].value;\nconst message = change.messages[0];\nconst contact = change.contacts[0];\n\nif (message.type !== 'text') {\n  return { json: { is_text: false } };\n}\n\n// Regex para detectar comandos avanzados\nconst text = message.text.body;\nconst lower = text.toLowerCase();\n\n// Regex: Horarios {ID} {FECHA}\nconst horariosRegex = /horarios\\s+(\\w+)\\s*(\\d{4}-\\d{2}-\\d{2})?/i;\nconst matchHorarios = text.match(horariosRegex);\n\n// Regex: Reservar {ID} {FECHA} {HORA} {DNI}\nconst reservarRegex = /reservar\\s+(\\w+)\\s+(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2})\\s+(\\d+)/i;\nconst matchReserva = text.match(reservarRegex);\n\nreturn {\n  json: {\n    is_text: true,\n    text: text,\n    lower_text: lower,\n    sender_phone: message.from,\n    sender_name: contact.profile.name,\n    business_id: change.metadata.phone_number_id,\n    intent: matchReserva ? 'reservar' : (matchHorarios ? 'horarios' : 'general'),\n    args: matchReserva || matchHorarios || []\n  }\n};"
+            },
+            "id": "parser",
+            "name": "Intérprete de Comandos",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                300,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://localhost:3001/whatsapp/webhook",
+                "sendBody": true,
+                "contentType": "json",
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "entry",
+                            "value": "={{ $node[\"Webhook WhatsApp\"].json.body.entry }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "sync",
+            "name": "Sync Inbox",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                500,
+                100
+            ]
+        },
+        {
+            "parameters": {
+                "dataType": "string",
+                "value1": "={{ $json.intent }}",
+                "rules": [
+                    {
+                        "value2": "horarios",
+                        "output": 0
+                    },
+                    {
+                        "value2": "reservar",
+                        "output": 1
+                    },
+                    {
+                        "value2": "general",
+                        "output": 2
+                    }
+                ]
+            },
+            "id": "router-main",
+            "name": "Router Principal",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 1,
+            "position": [
+                500,
+                400
+            ],
+            "notes": "0: Horarios, 1: Reservar, 2: General/Chat"
+        },
+        {
+            "parameters": {
+                "functionCode": "const args = items[0].json.args;\n// args[1] = doctorId\n// args[2] = date (optional)\nconst today = new Date().toISOString().split('T')[0];\nreturn {\n  json: {\n    doctorId: args[1],\n    date: args[2] || today\n  }\n};"
+            },
+            "id": "prep-horarios",
+            "name": "Prep Horarios",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                700,
+                250
+            ]
+        },
+        {
+            "parameters": {
+                "url": "=http://localhost:3001/appointments/availability/{{ $json.doctorId }}",
+                "options": {},
+                "queryParameters": {
+                    "parameters": [
+                        {
+                            "name": "date",
+                            "value": "={{ $json.date }}"
+                        }
+                    ]
+                }
+            },
+            "id": "get-slots",
+            "name": "Obtener Slots Disponibles",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                900,
+                250
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "API_KEY",
+                    "name": "Backend Auth"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "functionCode": "const slots = items.map(i => i.json);\n// slots es array de strings \"09:00\", etc. o objetos\n// Asumiremos que devuelve array de tiempos\n\nif (!slots.length) {\n  return { json: { text: \"❌ No hay horarios disponibles para esa fecha.\" } };\n}\n\nconst lista = slots.join(', ');\nconst docId = $node[\"Prep Horarios\"].json.doctorId;\nconst fecha = $node[\"Prep Horarios\"].json.date;\n\nreturn {\n  json: {\n    text: `📅 *Horarios Disponibles para ${fecha}*\\n\\n${lista}\\n\\n👉 *Para reservar envía:*\\n\"Reservar ${docId} ${fecha} HORA DNI\"\\n(Ej: Reservar ${docId} ${fecha} 10:00 12345678)`,\n    sender_phone: $node[\"Intérprete de Comandos\"].json.sender_phone,\n    business_id: $node[\"Intérprete de Comandos\"].json.business_id\n  }\n};"
+            },
+            "id": "fmt-slots",
+            "name": "Formatear Slots",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                250
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.business_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": $json.text } }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "send-slots",
+            "name": "Enviar Slots",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1300,
+                250
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "WhatsappAPI",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "functionCode": "const args = items[0].json.args;\n// args[1]Id, args[2]Fecha, args[3]Hora, args[4]DNI\nreturn {\n  json: {\n    doctorId: args[1],\n    date: args[2],\n    time: args[3],\n    dni: args[4],\n    phone: $node[\"Intérprete de Comandos\"].json.sender_phone\n  }\n};"
+            },
+            "id": "prep-reserva",
+            "name": "Prep Reserva",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                700,
+                450
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://localhost:3001/appointments/bot-create",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "doctorId",
+                            "value": "={{ $json.doctorId }}"
+                        },
+                        {
+                            "name": "date",
+                            "value": "={{ $json.date }}"
+                        },
+                        {
+                            "name": "time",
+                            "value": "={{ $json.time }}"
+                        },
+                        {
+                            "name": "dni",
+                            "value": "={{ $json.dni }}"
+                        },
+                        {
+                            "name": "patientPhone",
+                            "value": "={{ $json.phone }}"
+                        },
+                        {
+                            "name": "apiKey",
+                            "value": "mediturnos_secret_bot_key"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "create-appt",
+            "name": "Crear Turno (API)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                900,
+                450
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $node[\"Intérprete de Comandos\"].json.business_id }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $node[\"Intérprete de Comandos\"].json.sender_phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": \"✅ *Turno Confirmado*\\n\\nTe esperamos el día \" + $node[\"Prep Reserva\"].json.date + \" a las \" + $node[\"Prep Reserva\"].json.time } }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "confirm-appt",
+            "name": "Confirmar Reserva",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                450
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "WhatsappAPI",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "dataType": "string",
+                "value1": "={{ $json.lower_text }}",
+                "rules": [
+                    {
+                        "operation": "contains",
+                        "value2": "agendar",
+                        "output": 0
+                    },
+                    {
+                        "operation": "contains",
+                        "value2": "turno",
+                        "output": 0
+                    },
+                    {
+                        "operation": "contains",
+                        "value2": "secretaria",
+                        "output": 1
+                    }
+                ],
+                "fallbackOutput": 2
+            },
+            "id": "router-general",
+            "name": "Router General",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 1,
+            "position": [
+                700,
+                650
+            ]
+        },
+        {
+            "parameters": {
+                "url": "http://localhost:3001/areas",
+                "options": {}
+            },
+            "id": "get-areas-main",
+            "name": "Get Áreas",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                900,
+                600
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const msg = $node[\"Intérprete de Comandos\"].json;\nconst areas = items.map(i => i.json.name).join('\\n• ');\n\nreturn {\n  json: {\n    text: `🏥 *Especialidades*\\n\\n• ${areas}\\n\\nEscribe el nombre de la especialidad para buscar doctores.`,\n    phone: msg.sender_phone,\n    bid: msg.business_id\n  }\n};"
+            },
+            "id": "fmt-areas-main",
+            "name": "Fmt Áreas",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                600
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.bid }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": $json.text } }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "send-areas-main",
+            "name": "Enviar Áreas",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1300,
+                600
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "WhatsappAPI",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "url": "http://localhost:3001/users/doctors",
+                "options": {}
+            },
+            "id": "search-docs",
+            "name": "Buscar Doctores General",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                900,
+                750
+            ],
+            "notes": "Aquí deberías llamar a backend y filtrar por lo que el usuario escribió"
+        },
+        {
+            "parameters": {
+                "functionCode": "const text = $node[\"Intérprete de Comandos\"].json.lower_text;\nconst doctors = items.map(i => i.json);\n// Simple local filter logic for demo\nconst matched = doctors.filter(d => \n    (d.specialty?.name || '').toLowerCase().includes(text) ||\n    d.lastName.toLowerCase().includes(text)\n);\n\nif (!matched.length) {\n    return { json: { found: false } };\n}\n\nconst list = matched.map(d => `👨‍⚕️ ${d.firstName} ${d.lastName} (ID: ${d.id})`).join('\\n');\n\nreturn {\n    json: {\n        found: true,\n        text: `🔎 *Doctores encontrados:*\\n\\n${list}\\n\\n📅 Para ver horarios, escribe:\\n\"Horarios [ID] [YYYY-MM-DD]\"`,\n        phone: $node[\"Intérprete de Comandos\"].json.sender_phone,\n        bid: $node[\"Intérprete de Comandos\"].json.business_id\n    }\n};"
+            },
+            "id": "filter-docs",
+            "name": "Filtrar Resultados",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 1,
+            "position": [
+                1100,
+                750
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.found }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "id": "check-found-v3",
+            "name": "Encontrado?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                1250,
+                750
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://graph.facebook.com/v17.0/{{ $json.bid }}/messages",
+                "authentication": "headerAuth",
+                "sendBody": true,
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "messaging_product",
+                            "value": "whatsapp"
+                        },
+                        {
+                            "name": "to",
+                            "value": "={{ $json.phone }}"
+                        },
+                        {
+                            "name": "text",
+                            "value": "={{ {\"body\": $json.text } }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "send-search-result",
+            "name": "Enviar Resultado",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 1,
+            "position": [
+                1450,
+                750
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "WhatsappAPI",
+                    "name": "WhatsApp Cloud API"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook WhatsApp": {
+            "main": [
+                [
+                    {
+                        "node": "Intérprete de Comandos",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Intérprete de Comandos": {
+            "main": [
+                [
+                    {
+                        "node": "Sync Inbox",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Router Principal",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Router Principal": {
+            "main": [
+                [
+                    {
+                        "node": "Prep Horarios",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Prep Reserva",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Router General",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prep Horarios": {
+            "main": [
+                [
+                    {
+                        "node": "Obtener Slots Disponibles",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Obtener Slots Disponibles": {
+            "main": [
+                [
+                    {
+                        "node": "Formatear Slots",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Formatear Slots": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Slots",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prep Reserva": {
+            "main": [
+                [
+                    {
+                        "node": "Crear Turno (API)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Crear Turno (API)": {
+            "main": [
+                [
+                    {
+                        "node": "Confirmar Reserva",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Router General": {
+            "main": [
+                [
+                    {
+                        "node": "Get Áreas",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [],
+                [
+                    {
+                        "node": "Buscar Doctores General",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Áreas": {
+            "main": [
+                [
+                    {
+                        "node": "Fmt Áreas",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fmt Áreas": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Áreas",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Buscar Doctores General": {
+            "main": [
+                [
+                    {
+                        "node": "Filtrar Resultados",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Filtrar Resultados": {
+            "main": [
+                [
+                    {
+                        "node": "Encontrado?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Encontrado?": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Resultado",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                []
+            ]
+        }
+    }
+}

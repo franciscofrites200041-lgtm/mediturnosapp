@@ -1,0 +1,799 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// MULTI-TENANT: CLÍNICAS (TENANTS)
+// ==========================================
+
+model Clinic {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique // URL-friendly identifier
+  email             String   @unique
+  phone             String
+  address           String?
+  city              String?
+  country           String   @default("AR")
+  logoUrl           String?
+  timezone          String   @default("America/Argentina/Buenos_Aires")
+  
+  // Configuración de la clínica
+  settings          Json     @default("{}")
+  
+  // Estado de suscripción
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  subscriptionPlan   SubscriptionPlan   @default(BASIC)
+  trialEndsAt        DateTime?
+  subscriptionEndsAt DateTime?
+  
+  // Webhooks para n8n
+  webhookUrl         String?
+  webhookSecret      String?
+  
+  // API Key para integraciones externas (n8n)
+  apiKey             String?  @unique
+  apiKeyExpiresAt    DateTime?
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relaciones
+  users             User[]
+  patients          Patient[]
+  appointments      Appointment[]
+  areas             Area[]
+  medicalRecords    MedicalRecord[]
+  prescriptions     Prescription[]
+  invoices          Invoice[]
+  schedules         DoctorSchedule[]
+  
+  // Billing & WhatsApp Relations
+  subscriptions     Subscription[]
+  payments          Payment[]
+  whatsappConfig    WhatsAppConfig?
+  whatsappConversations WhatsAppConversation[]
+  
+  @@index([slug])
+  @@index([apiKey])
+  @@map("clinics")
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  SUSPENDED
+}
+
+enum SubscriptionPlan {
+  BASIC      // 1-3 doctores
+  PROFESSIONAL // 4-10 doctores
+  ENTERPRISE   // Ilimitado
+}
+
+// ==========================================
+// USUARIOS Y ROLES (RBAC)
+// ==========================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  phone         String?
+  avatarUrl     String?
+  
+  // Rol del usuario
+  role          UserRole
+  
+  // Para doctores: especialidad y licencia
+  specialtyId   String?
+  specialty     Area?     @relation(fields: [specialtyId], references: [id])
+  licenseNumber String?
+  signature     String?   // Firma digital del doctor (base64)
+  
+  // Multi-tenant
+  clinicId      String?
+  clinic        Clinic?   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Seguridad
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  failedLoginAttempts Int @default(0)
+  lockedUntil   DateTime?
+  
+  // Tokens
+  refreshToken  String?
+  resetToken    String?
+  resetTokenExp DateTime?
+  emailVerifyToken    String?
+  emailVerifyTokenExp DateTime?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relaciones
+  appointments      Appointment[]     @relation("DoctorAppointments")
+  createdAppointments Appointment[]   @relation("CreatedByUser")
+  medicalRecords    MedicalRecord[]
+  prescriptions     Prescription[]
+  schedules         DoctorSchedule[]
+  auditLogs         AuditLog[]
+  
+  // WhatsApp: Conversaciones asignadas a este usuario (para atención humana)
+  assignedConversations WhatsAppConversation[]
+  
+  @@index([email])
+  @@index([clinicId])
+  @@index([role])
+  @@map("users")
+}
+
+enum UserRole {
+  SUPER_ADMIN     // Administrador del SaaS
+  CLINIC_ADMIN    // Administrador de clínica
+  DOCTOR          // Médico
+  SECRETARY       // Secretaria/Recepcionista
+}
+
+// ==========================================
+// PACIENTES
+// ==========================================
+
+model Patient {
+  id              String    @id @default(cuid())
+  
+  // Datos personales (algunos encriptados)
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String
+  phoneSecondary  String?
+  
+  // Documento de identidad (encriptado)
+  documentType    DocumentType @default(DNI)
+  documentNumber  String    // Encriptado en la aplicación
+  
+  // Datos demográficos
+  birthDate       DateTime?
+  gender          Gender?
+  address         String?
+  city            String?
+  
+  // Datos de emergencia
+  emergencyContact String?
+  emergencyPhone   String?
+  
+  // Seguro médico
+  insuranceProvider String?
+  insuranceNumber   String?
+  
+  // Notas generales
+  notes           String?
+  
+  // Multi-tenant
+  clinicId        String
+  clinic          Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Fuente del paciente (presencial, whatsapp, web)
+  source          PatientSource @default(WALK_IN)
+  
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relaciones
+  appointments    Appointment[]
+  medicalRecords  MedicalRecord[]
+  prescriptions   Prescription[]
+  whatsappConversations WhatsAppConversation[]
+  
+  @@unique([clinicId, documentNumber])
+  @@index([clinicId])
+  @@index([phone])
+  @@index([lastName])
+  @@map("patients")
+}
+
+enum DocumentType {
+  DNI
+  PASSPORT
+  CUIL
+  CUIT
+  OTHER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum PatientSource {
+  WALK_IN     // Presencial
+  WHATSAPP    // Bot de WhatsApp
+  WEB         // Portal web
+  PHONE       // Teléfono
+  REFERRAL    // Referido
+}
+
+// ==========================================
+// ÁREAS / ESPECIALIDADES
+// ==========================================
+
+model Area {
+  id          String    @id @default(cuid())
+  name        String    // Ej: "Cardiología", "Pediatría"
+  description String?
+  color       String    @default("#3B82F6") // Color para calendario
+  icon        String?   // Icono opcional
+  
+  // Duración por defecto de consultas (minutos)
+  defaultDuration Int   @default(30)
+  
+  // Multi-tenant
+  clinicId    String
+  clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relaciones
+  doctors     User[]
+  appointments Appointment[]
+  
+  @@unique([clinicId, name])
+  @@index([clinicId])
+  @@map("areas")
+}
+
+// ==========================================
+// HORARIOS DE DOCTORES
+// ==========================================
+
+model DoctorSchedule {
+  id          String    @id @default(cuid())
+  
+  doctorId    String
+  doctor      User      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  
+  // Multi-tenant
+  clinicId    String
+  clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Día de la semana (0=Domingo, 1=Lunes, etc.)
+  dayOfWeek   Int
+  
+  // Horarios (formato HH:mm)
+  startTime   String    // Ej: "09:00"
+  endTime     String    // Ej: "13:00"
+  
+  // Duración de cada slot (minutos)
+  slotDuration Int      @default(30)
+  
+  // Máximo de pacientes por slot (para turnos múltiples)
+  maxPatients Int       @default(1)
+  
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([doctorId])
+  @@index([clinicId])
+  @@map("doctor_schedules")
+}
+
+// ==========================================
+// TURNOS / CITAS
+// ==========================================
+
+model Appointment {
+  id          String    @id @default(cuid())
+  
+  // Referencias principales
+  patientId   String
+  patient     Patient   @relation(fields: [patientId], references: [id])
+  
+  doctorId    String
+  doctor      User      @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  
+  areaId      String
+  area        Area      @relation(fields: [areaId], references: [id])
+  
+  // Multi-tenant
+  clinicId    String
+  clinic      Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Fecha y hora
+  scheduledAt DateTime  // Fecha y hora del turno
+  duration    Int       @default(30) // Duración en minutos
+  
+  // Estado del turno
+  status      AppointmentStatus @default(SCHEDULED)
+  
+  // Tipo de turno
+  type        AppointmentType   @default(IN_PERSON)
+  
+  // Notas
+  reason      String?   // Motivo de consulta
+  notes       String?   // Notas adicionales
+  
+  // Recordatorios
+  reminderSent Boolean  @default(false)
+  reminderSentAt DateTime?
+  
+  // Quién creó el turno
+  createdById String?
+  createdBy   User?     @relation("CreatedByUser", fields: [createdById], references: [id])
+  
+  // Fuente de la reserva
+  source      PatientSource @default(WALK_IN)
+  
+  // Datos de cancelación
+  cancelledAt DateTime?
+  cancelReason String?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relaciones
+  medicalRecord MedicalRecord?
+  prescription  Prescription?
+  
+  @@index([clinicId])
+  @@index([doctorId])
+  @@index([patientId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+  SCHEDULED     // Programado
+  CONFIRMED     // Confirmado
+  CHECKED_IN    // Paciente llegó
+  IN_PROGRESS   // En consulta
+  COMPLETED     // Finalizado
+  CANCELLED     // Cancelado
+  NO_SHOW       // No se presentó
+}
+
+enum AppointmentType {
+  IN_PERSON     // Presencial
+  VIDEO_CALL    // Telemedicina
+  PHONE         // Telefónico
+}
+
+// ==========================================
+// HISTORIA CLÍNICA (EMR)
+// ==========================================
+
+model MedicalRecord {
+  id            String    @id @default(cuid())
+  
+  // Referencias
+  patientId     String
+  patient       Patient   @relation(fields: [patientId], references: [id])
+  
+  doctorId      String
+  doctor        User      @relation(fields: [doctorId], references: [id])
+  
+  appointmentId String?   @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  
+  // Multi-tenant
+  clinicId      String
+  clinic        Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Datos de la consulta (almacenados encriptados)
+  chiefComplaint    String?   // Motivo de consulta
+  presentIllness    String?   // Enfermedad actual
+  physicalExam      String?   // Examen físico
+  diagnosis         String?   // Diagnóstico
+  diagnosisCode     String?   // Código CIE-10
+  treatmentPlan     String?   // Plan de tratamiento
+  notes             String?   // Notas adicionales
+  
+  // Signos vitales
+  vitalSigns        Json?     // { bloodPressure, heartRate, temperature, weight, height, etc }
+  
+  // Estudios solicitados
+  labOrders         String?
+  imagingOrders     String?
+  
+  // Seguimiento
+  followUpDate      DateTime?
+  followUpNotes     String?
+  
+  // Estado
+  status            RecordStatus @default(DRAFT)
+  completedAt       DateTime?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@map("medical_records")
+}
+
+enum RecordStatus {
+  DRAFT
+  COMPLETED
+  AMENDED
+}
+
+// ==========================================
+// RECETAS
+// ==========================================
+
+model Prescription {
+  id            String    @id @default(cuid())
+  
+  // Referencias
+  patientId     String
+  patient       Patient   @relation(fields: [patientId], references: [id])
+  
+  doctorId      String
+  doctor        User      @relation(fields: [doctorId], references: [id])
+  
+  appointmentId String?   @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  
+  // Multi-tenant
+  clinicId      String
+  clinic        Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Contenido de la receta
+  medications   Json      // Array de medicamentos con dosis, frecuencia, etc.
+  instructions  String?   // Indicaciones generales
+  
+  // Diagnóstico asociado
+  diagnosis     String?
+  
+  // Validez
+  validUntil    DateTime?
+  
+  // Estado de envío
+  sentAt        DateTime?
+  sentVia       String?   // "email", "whatsapp", "printed"
+  
+  // Firma digital
+  signedAt      DateTime?
+  signatureHash String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([clinicId])
+  @@index([patientId])
+  @@map("prescriptions")
+}
+
+// ==========================================
+// FACTURACIÓN SAAS
+// ==========================================
+
+model Invoice {
+  id            String    @id @default(cuid())
+  
+  // Clínica
+  clinicId      String
+  clinic        Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Datos de factura
+  invoiceNumber String    @unique
+  amount        Decimal   @db.Decimal(10, 2)
+  currency      String    @default("ARS")
+  
+  // Período facturado
+  periodStart   DateTime
+  periodEnd     DateTime
+  
+  // Estado
+  status        InvoiceStatus @default(PENDING)
+  
+  // Pago
+  paidAt        DateTime?
+  paymentMethod String?
+  paymentRef    String?
+  
+  // PDF
+  pdfUrl        String?
+  
+  dueDate       DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([clinicId])
+  @@index([status])
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+// ==========================================
+// AUDITORÍA
+// ==========================================
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  
+  // Usuario que realizó la acción
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  
+  // Multi-tenant
+  clinicId    String?
+  
+  // Acción realizada
+  action      String    // CREATE, UPDATE, DELETE, LOGIN, etc.
+  resource    String    // Entidad afectada
+  resourceId  String?   // ID del recurso
+  
+  // Detalles
+  details     Json?     // Datos adicionales
+  ipAddress   String?
+  userAgent   String?
+  
+  createdAt   DateTime  @default(now())
+  
+  @@index([clinicId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ==========================================
+// NOTIFICACIONES WEBHOOK (Para n8n)
+// ==========================================
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  
+  clinicId    String
+  
+  // Tipo de evento
+  eventType   String    // PRESCRIPTION_SENT, APPOINTMENT_CREATED, etc.
+  
+  // Payload del evento
+  payload     Json
+  
+  // Estado de entrega
+  status      WebhookStatus @default(PENDING)
+  
+  // Intentos de entrega
+  attempts    Int       @default(0)
+  lastAttempt DateTime?
+  lastError   String?
+  
+  // Entrega exitosa
+  deliveredAt DateTime?
+  
+  createdAt   DateTime  @default(now())
+  
+  @@index([clinicId])
+  @@index([status])
+  @@index([eventType])
+  @@map("webhook_events")
+}
+
+enum WebhookStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  RETRYING
+}
+
+// ==========================================
+// BILLING & SUBSCRIPTIONS (Mercado Pago)
+// ==========================================
+
+model Subscription {
+  id              String           @id @default(cuid())
+  
+  clinicId        String
+  clinic          Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Mercado Pago Preapproval
+  mpPreapprovalId String?          @unique // ID de la suscripción en MP
+  mpPayerEmail    String?
+  mpStatus        String?          // authorized, paused, cancelled
+  
+  plan            SubscriptionPlan
+  price           Decimal          @db.Decimal(10, 2)
+  currency        String           @default("ARS")
+  
+  billingDay      Int?             // Día del mes de cobro
+  nextPaymentDate DateTime?
+  
+  isActive        Boolean          @default(true)
+  cancelledAt     DateTime?
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  payments        Payment[]
+
+  @@index([clinicId])
+  @@index([mpPreapprovalId])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id              String            @id @default(cuid())
+  
+  clinicId        String
+  clinic          Clinic            @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  subscriptionId  String?
+  subscription    Subscription?     @relation(fields: [subscriptionId], references: [id])
+  
+  // Mercado Pago Payment
+  mpPaymentId     String            @unique
+  mpStatus        String            // approved, pending, rejected
+  mpStatusDetail  String?
+  mpPaymentType   String?           // credit_card, debit_card, ticket
+  
+  amount          Decimal           @db.Decimal(10, 2)
+  currency        String            @default("ARS")
+  
+  description     String?
+  
+  dateApproved    DateTime?
+  dateCreated     DateTime          @default(now())
+  
+  @@index([clinicId])
+  @@index([mpPaymentId])
+  @@index([dateCreated])
+  @@map("payments")
+}
+
+// ==========================================
+// WHATSAPP INTEGRATION (Meta Cloud API)
+// ==========================================
+
+model WhatsAppConfig {
+  id              String    @id @default(cuid())
+  
+  clinicId        String    @unique
+  clinic          Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  // Meta Cloud API Credentials
+  phoneNumber     String    // El número visible (+54...)
+  phoneNumberId   String    @unique // Meta Phone Number ID
+  wabaId          String    // WhatsApp Business Account ID
+  
+  // Tokens (se deben renovar o usar permanent token)
+  accessToken     String?   @db.Text
+  
+  // Configuración del bot
+  isBotEnabled    Boolean   @default(true)
+  welcomeMessage  String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  conversations   WhatsAppConversation[]
+
+  @@map("whatsapp_configs")
+}
+
+model WhatsAppConversation {
+  id              String    @id @default(cuid())
+  
+  clinicId        String
+  clinic          Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  
+  waConfigId      String
+  waConfig        WhatsAppConfig @relation(fields: [waConfigId], references: [id])
+  
+  // Identificación del cliente/paciente
+  contactPhone    String    // Número del paciente
+  contactName     String?   // Nombre en WhatsApp
+  
+  // Relación opcional con paciente del sistema
+  patientId       String?
+  patient         Patient?  @relation(fields: [patientId], references: [id])
+  
+  // Estado de la conversación (para ventanas de 24h)
+  lastMessageAt   DateTime  @default(now())
+  
+  // === HUMAN HANDOFF FEATURE ===
+  // Cuando el paciente elige "Hablar con recepción"
+  needsHumanAttention Boolean  @default(false)
+  humanRequestedAt    DateTime?  // Cuándo se pidió atención humana
+  
+  // Quién está atendiendo esta conversación (Secretaria/Admin)
+  assignedToUserId    String?
+  assignedToUser      User?     @relation(fields: [assignedToUserId], references: [id])
+  assignedAt          DateTime?
+  
+  // Estado de la conversación
+  status              ConversationStatus @default(ACTIVE)
+  closedAt            DateTime?
+  
+  messages        WhatsAppMessage[]
+
+  @@unique([waConfigId, contactPhone]) // Una conversación por número por clínica
+  @@index([clinicId])
+  @@index([contactPhone])
+  @@index([needsHumanAttention])
+  @@map("whatsapp_conversations")
+}
+
+enum ConversationStatus {
+  ACTIVE           // Bot manejando o conversación abierta
+  WAITING_HUMAN    // Esperando que un humano responda
+  HUMAN_HANDLING   // Un humano está respondiendo
+  CLOSED           // Conversación cerrada
+}
+
+model WhatsAppMessage {
+  id              String    @id @default(cuid())
+  
+  conversationId  String
+  conversation    WhatsAppConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  // Meta Message ID
+  wamid           String?   @unique
+  
+  direction       MessageDirection // INBOUND, OUTBOUND
+  type            MessageType      // TEXT, TEMPLATE, IMAGE, DOCUMENT
+  
+  // Contenido
+  body            String?   @db.Text
+  mediaUrl        String?
+  
+  // Estado de entrega (para outbound)
+  status          MessageStatus @default(SENT)
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([conversationId])
+  @@map("whatsapp_messages")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  TEMPLATE
+  IMAGE
+  DOCUMENT
+  AUDIO
+  INTERACTIVE // Botones, listas
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
