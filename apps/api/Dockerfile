@@ -44,4 +44,4 @@ RUN npx prisma@5 generate --schema=apps/api/prisma/schema.prisma
 
 EXPOSE 3001
 
-CMD ["node", "apps/api/dist/main"]
+CMD ["sh", "-c", "ls -R /app && node apps/api/dist/main"]
