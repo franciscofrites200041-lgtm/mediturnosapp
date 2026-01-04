@@ -38,9 +38,9 @@ RUN pnpm install --prod --no-frozen-lockfile
 # Copiar build desde builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-# Copiar cliente prisma generado (ubicación puede variar con pnpm, pero usualmente está en node_modules principal)
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+# Generar cliente prisma en producción (garantiza ubicación correcta)
+RUN npx prisma@5 generate --schema=apps/api/prisma/schema.prisma
 
 EXPOSE 3001
 
