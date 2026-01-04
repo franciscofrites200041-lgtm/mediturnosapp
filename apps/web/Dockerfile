@@ -1,32 +1,30 @@
-FROM node:18-alpine AS builder
+FROM node:18-alpine AS base
+RUN npm install -g pnpm
 
+# --- Builder Stage ---
+FROM base AS builder
 WORKDIR /app
-
-# Copy generic package files
-COPY package.json package-lock.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 
-RUN npm ci
+RUN pnpm install --frozen-lockfile
 
-# Copy source code
 COPY . .
 
-# Build Web
-# NEXT_PUBLIC_API_URL must be provided at build time or runtime. 
-# Next.js bundles env vars at build time for client-side, so we might need a build arg.
+# Build con variable de entorno quemada para producción
 ENV NEXT_PUBLIC_API_URL=https://api.mediturnosapp.com
-RUN npm run build --workspace=apps/web
+RUN pnpm build --filter=@mediturnos/web...
 
-# --- Production Image ---
-FROM node:18-alpine AS runner
-
+# --- Runner Stage ---
+FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
 
 # Copy necessary files for standalone mode
+# Nota: La estructura standalone de Next copia node_modules necesarios dentro de standalone
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/.next/standalone ./

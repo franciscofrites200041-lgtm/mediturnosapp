@@ -1,46 +1,47 @@
-FROM node:18-alpine AS builder
+FROM node:18-alpine AS base
+RUN npm install -g pnpm
 
+# --- Builder Stage ---
+FROM base AS builder
 WORKDIR /app
-
-# Copy generic package files
-COPY package.json package-lock.json ./
-# Copy specific app package files (assuming monorepo structure)
+# Copiar archivos de definición de monorepo
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+# Copiar package.json de apps (necesario para pnpm install)
 COPY apps/api/package.json ./apps/api/package.json
 COPY apps/web/package.json ./apps/web/package.json
 
-# Install dependencies (including devDependencies for build)
-RUN npm ci
+# Instalar todas las dependencias (dev incluidas)
+RUN pnpm install --frozen-lockfile
 
-# Copy source code
+# Copiar todo el código fuente
 COPY . .
 
-# Generate Prisma Client
-RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
+# Generar cliente Prisma
+RUN pnpm dlx prisma generate --schema=apps/api/prisma/schema.prisma
 
-# Build API
-RUN npm run build --workspace=apps/api
+# Build de la API
+RUN pnpm build --filter=@mediturnos/api...
 
-# --- Production Image ---
-FROM node:18-alpine AS runner
-
+# --- Runner Stage ---
+FROM base AS runner
 WORKDIR /app
+ENV NODE_ENV production
 
-# Install production dependencies only
-COPY package.json package-lock.json ./
+# Copiar dependencias de prod
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
 
-# Install ONLY prod deps to save space
-RUN npm ci --omit=dev
+# Instalar solo prod dependencies
+RUN pnpm install --prod --frozen-lockfile
 
-# Copy built assets from builder
+# Copiar build desde builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+# Copiar cliente prisma generado (ubicación puede variar con pnpm, pero usualmente está en node_modules principal)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-
-# Copy necessary config files if needed
-COPY --from=builder /app/apps/api/.env.example ./apps/api/.env
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 3001
 
-# Start the application
 CMD ["node", "apps/api/dist/main"]
