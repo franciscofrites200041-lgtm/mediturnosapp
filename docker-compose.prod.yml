@@ -40,8 +40,9 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      DATABASE_URL: postgres://mediturnos:secure_prod_password_change_me@db_mediturnos:5432/mediturnos_prod?schema=public
-      REDIS_HOST: redis_mediturnos
+      # Usamos 'mediturnos_db' (container_name) para resolución DNS interna segura
+      DATABASE_URL: postgres://mediturnos:secure_prod_password_change_me@mediturnos_db:5432/mediturnos_prod?schema=public
+      REDIS_HOST: mediturnos_redis
       REDIS_PORT: 6379
       # IMPORTANTE: Cambia estos valores en producción
       JWT_SECRET: ${JWT_SECRET}
@@ -53,6 +54,8 @@ services:
       MP_PUBLIC_KEY: ${MP_PUBLIC_KEY}
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM:-notificaciones@mediturnosapp.com}
+      # Bot Security
+      BOT_API_KEY: ${BOT_API_KEY}
     depends_on:
       db_mediturnos:
         condition: service_healthy
