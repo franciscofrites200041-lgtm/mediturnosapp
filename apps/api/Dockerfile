@@ -16,8 +16,8 @@ RUN pnpm install --no-frozen-lockfile
 # Copiar todo el código fuente
 COPY . .
 
-# Generar cliente Prisma
-RUN npx prisma generate --schema=apps/api/prisma/schema.prisma
+# Generar cliente Prisma (Forzando v5 para evitar v7 breaking changes)
+RUN npx prisma@5 generate --schema=apps/api/prisma/schema.prisma
 
 # Build de la API
 RUN pnpm build --filter=@mediturnos/api...
