@@ -25,8 +25,9 @@ ENV PORT=3000
 
 # Copy necessary files for standalone mode
 # Nota: La estructura standalone de Next copia node_modules necesarios dentro de standalone
-COPY --from=builder /app/apps/web/public ./apps/web/public
-COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+# Arreglo de estilos: Copiar assets estáticos a la raíz donde corre server.js
+COPY --from=builder /app/apps/web/public ./public
+COPY --from=builder /app/apps/web/.next/static ./.next/static
 COPY --from=builder /app/apps/web/.next/standalone ./
 
 # Instalar dependencias explicitamente para asegurar que 'next' existe
