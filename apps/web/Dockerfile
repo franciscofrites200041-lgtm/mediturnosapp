@@ -12,8 +12,9 @@ RUN pnpm install --no-frozen-lockfile
 
 COPY . .
 
-# Build con variable de entorno quemada para producción
-ENV NEXT_PUBLIC_API_URL=https://api.mediturnosapp.com
+# Build con variable de entorno inyectada
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN pnpm build --filter=@mediturnos/web...
 
 # --- Runner Stage ---
