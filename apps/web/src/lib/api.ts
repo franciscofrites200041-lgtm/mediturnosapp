@@ -67,7 +67,7 @@ export const authApi = {
         return response.data;
     },
     signup: async (data: SignupData) => {
-        const response = await api.post('/auth/signup', data);
+        const response = await api.post('/auth/register', data);
         return response.data;
     },
     register: async (data: RegisterData) => {
