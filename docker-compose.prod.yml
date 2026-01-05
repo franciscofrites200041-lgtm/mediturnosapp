@@ -48,7 +48,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-      FRONTEND_URL: https://mediturnosapp.com
+      FRONTEND_URL: https://www.mediturnosapp.com
       # Integraciones
       MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN}
       MP_PUBLIC_KEY: ${MP_PUBLIC_KEY}
